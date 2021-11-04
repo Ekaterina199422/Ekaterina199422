@@ -1,5 +1,6 @@
 package ru.netology.nmedia.ui
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -23,6 +24,10 @@ class StatsView @JvmOverloads constructor( // позволяет написат�
     private var center = PointF(0F, 0F) // обозначает точку
     private var radius = 0F
 
+    private var progress = 0F // свойство анимирования(будет меняться о 0 до 1)
+    private var valueAnimator: ValueAnimator? = null // добавляем сылку на аниматора  что бы не было утечек памяти
+    private val initialAngle = -90F
+
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = lineWidth.toFloat()
@@ -41,7 +46,7 @@ class StatsView @JvmOverloads constructor( // позволяет написат�
     var data: List<Float> = emptyList()
         set(value) {
             field = value
-            invalidate()
+            update()
         }
 
     private var colors = emptyList<Int>()
@@ -79,19 +84,34 @@ class StatsView @JvmOverloads constructor( // позволяет написат�
     override fun onDraw(canvas: Canvas) {
         val data = getValues(data)
 
-        if (data.isEmpty()) {
+        if (data.isEmpty() || progress == 0F) {
             return
         }
 
-        var startAngle = -90F
-        data.forEachIndexed() { index,item ->
+        var startAngle = initialAngle
+        val maxAngle = 360F * progress
+        data.forEachIndexed { index, item ->
         val angle = item * 360F
-        paint.color = colors.getOrElse(index) { getRandomColor() }
-        canvas.drawArc(oval, startAngle, angle, false, paint)
-        startAngle += angle
+            if (startAngle - initialAngle + angle > maxAngle) {
+                drawData(
+                    index = index,
+                    canvas = canvas,
+                    startFrom = startAngle,
+                    sweepAngle = maxAngle - startAngle + initialAngle
 
-    }
-    if (data[0] > 0)
+                )
+                return
+            }
+            drawData(
+                index = index,
+                canvas = canvas,
+                startFrom = startAngle,
+                sweepAngle = angle
+            )
+            startAngle += angle
+        }
+
+        if (data[0] > 0)
     {
         paint.color = colors.getOrElse(0) { getRandomColor() }
         startAngle = -90F
@@ -104,7 +124,36 @@ class StatsView @JvmOverloads constructor( // позволяет написат�
     textPaint
     )
 }
+    private fun update() {
+        valueAnimator?.let { // проверяет предыдущий аниматор
+            it.removeAllListeners() // если он есть вычешаем слушателей
+            it.cancel() // оменяем саму анимацию
+        }
+        progress = 0F // прогресс на начальное занчение
 
+        valueAnimator = ValueAnimator.ofFloat(0F, 1F).apply { // вызов аниматора
+            addUpdateListener { anim -> // устанавливаем слушателя, который следит за изменением занчений
+                progress = anim.animatedValue as Float // приходит новое значение, происходит приведение типов
+                invalidate() // на каждый кадр обновляем ui
+            }
+            duration = 5000 // продолжительность
+          //  interpolator = FastOutLinearInInterpolator()
+        }.also {
+            it.start()
+        }
+    }
+
+    private fun drawData(
+        index: Int,
+        canvas: Canvas,
+        startFrom: Float,
+        sweepAngle: Float,
+    ) {
+        paint.color = colors.getOrElse(index) { getRandomColor() }
+        canvas.drawArc(oval, startFrom, sweepAngle, false, paint)
+        paint.color = colors[0]
+        canvas.drawArc(oval, initialAngle, 1F, false, paint)
+    }
 private fun getRandomColor() = Random.nextInt(0xFF000000.toInt(), 0xFFFFFFFF.toInt())
 
 private fun getValues(data: List<Float>): List<Float> {
